@@ -99,10 +99,16 @@
   };
   // Hand the browser the new scheme; if FoxView is an older build it will not answer, so the old
   // scheme follows a moment later. The browser shows its own "Open FoxView?" sheet either way.
+  // "Left" means the handoff happened: the tab hid, the window lost focus to the Open FoxView sheet
+  // or to Finder, or the page is being torn down. Only then is the old scheme NOT sent, so one click
+  // reaches FoxView once (Sam's Finder test 2026-10-16: the fallback arrived too and opened a second time).
   var left = false;
-  document.addEventListener('visibilitychange', function () { if (document.hidden) left = true; });
+  function gone() { left = true; }
+  document.addEventListener('visibilitychange', function () { if (document.hidden) gone(); });
+  window.addEventListener('blur', gone);
+  window.addEventListener('pagehide', gone);
   location.href = newLink;
-  setTimeout(function () { if (!left) { location.href = oldLink; } }, 1200);
+  setTimeout(function () { if (!left) { location.href = oldLink; } }, 1500);
   setTimeout(function () { if (!left) { S.textContent = 'If FoxView did not open, it may not be installed on this Mac. The path is below.'; } }, 3000);
 })();
 </script>
