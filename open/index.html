@@ -28,10 +28,11 @@
 <main>
   <div class="card">
     <h1><span>&#129418;</span> Open in FoxView</h1>
-    <p id="status">Opening this folder in FoxView&hellip;</p>
+    <p id="status">Opening this folder&hellip;</p>
     <code class="path" id="path" hidden></code>
     <div class="row">
       <a class="btn primary" id="again" href="#" hidden>Open in FoxView</a>
+      <a class="btn" id="finder" href="#" hidden>Reveal in Finder</a>
       <button id="copy" hidden>Copy path</button>
     </div>
     <p id="bad" hidden></p>
@@ -47,38 +48,52 @@
   </div>
 </main>
 <script>
-// FoxLink v0.0.1 (Sam 2026-10-15): our own https link in place of LinkYourFile. The same encoding:
-// ?p= is standard base64 of the Lucid path, URL-encoded (= becomes %3D). Decoded here, client side.
+// FoxLink (Sam 2026-10-15; readable form 2026-10-16). A link reads like the folder it opens: the path
+// after the Lucid master folder, one percent-encoded segment per folder, served by this file as the
+// site's 404 page. The first form, /open/?p=<base64> (LinkYourFile's value), still decodes. Decoded
+// here, client side; then the browser is handed foxview://open?p=…, and FoxView opens the folder or
+// reveals it in Finder by the editor's setting. The two buttons force either with in=.
 (function () {
-  function decode(search) {
+  var MASTER = '/Volumes/ads/PFM MEDIA MASTER FOLDER/';
+  function decodeParam(search) {
     var m = /[?&]p=([^&#]*)/.exec(search || '');
     if (!m) return null;
     var raw = decodeURIComponent(m[1].replace(/\+/g, '%2B')).replace(/ /g, '+');
     try {
       var bytes = atob(raw);
-      var out = decodeURIComponent(Array.prototype.map.call(bytes, function (ch) { return '%' + ('00' + ch.charCodeAt(0).toString(16)).slice(-2); }).join(''));
-      return out;
+      return decodeURIComponent(Array.prototype.map.call(bytes, function (ch) { return '%' + ('00' + ch.charCodeAt(0).toString(16)).slice(-2); }).join(''));
     } catch (e) { return null; }
   }
+  function decodePath(pathname) {
+    var m = /^\/foxlink\/(.+)$/.exec(pathname || '');
+    if (!m) return null;
+    var rest = m[1].replace(/\/+$/, '');
+    if (!rest || rest === 'open' || rest === 'open/index.html' || rest === 'index.html' || rest === '404.html') return null;
+    try {
+      return MASTER + rest.split('/').map(function (seg) { return decodeURIComponent(seg); }).join('/');
+    } catch (e) { return null; }
+  }
+  function decode(pathname, search) { return decodePath(pathname) || decodeParam(search); }
   function encodeParam(path) {
     var utf8 = unescape(encodeURIComponent(path));
     return btoa(utf8).replace(/=/g, '%3D');
   }
-  window.FoxLink = { decode: decode, encodeParam: encodeParam };
+  window.FoxLink = { decode: decode, decodePath: decodePath, decodeParam: decodeParam, encodeParam: encodeParam };
   if (typeof document === 'undefined' || !document || !document.body) return;   // the functions alone, for tests
   var S = document.getElementById('status'), P = document.getElementById('path'), A = document.getElementById('again'),
-      C = document.getElementById('copy'), B = document.getElementById('bad'), H = document.getElementById('help');
-  var path = decode(location.search);
+      F = document.getElementById('finder'), C = document.getElementById('copy'), B = document.getElementById('bad'), H = document.getElementById('help');
+  var path = decode(location.pathname, location.search);
   if (!path || path.indexOf('/Volumes/ads/') !== 0) {
     S.textContent = 'This link has no Lucid folder in it.';
-    B.textContent = path ? 'The path is not on Lucid: ' + path : 'Missing or unreadable ?p= value.';
+    B.textContent = path ? 'The path is not on Lucid: ' + path : 'Missing or unreadable link.';
     B.hidden = false; return;
   }
   P.textContent = path; P.hidden = false;
   var param = encodeParam(path);
-  var newLink = 'foxview://open?p=' + param;   // every build from 2026-10 answers this
+  var newLink = 'foxview://open?p=' + param;   // every build from 2026-10 answers this; FoxView applies the editor's setting
   var oldLink = 'foxio://open?p=' + param;     // builds before FoxLink answer only this
-  A.href = newLink; A.hidden = false; C.hidden = false; H.hidden = false;
+  A.href = newLink + '&in=foxview'; F.href = newLink + '&in=finder';
+  A.hidden = false; F.hidden = false; C.hidden = false; H.hidden = false;
   C.onclick = function () {
     navigator.clipboard && navigator.clipboard.writeText(path).then(function () { C.textContent = 'Copied'; setTimeout(function () { C.textContent = 'Copy path'; }, 1500); });
   };

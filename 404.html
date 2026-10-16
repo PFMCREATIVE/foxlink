@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex">
+<title>Open in FoxView</title>
+<style>
+  :root { color-scheme: light dark; --bg: #f6f6f7; --card: #fff; --tx: #1d1d1f; --tx2: #6e6e73; --acc: #ff6b35; --line: #e3e3e6; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #1b1b1d; --card: #262628; --tx: #f2f2f2; --tx2: #a0a0a6; --line: #3a3a3d; } }
+  html, body { margin: 0; background: var(--bg); color: var(--tx); font: 15px/1.45 -apple-system, "SF Pro Text", "Helvetica Neue", Arial, sans-serif; }
+  main { max-width: 560px; margin: 12vh auto 0; padding: 0 20px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 22px 24px; box-shadow: 0 6px 24px rgba(0,0,0,.06); }
+  h1 { font-size: 20px; margin: 0 0 6px; display: flex; align-items: center; gap: 10px; }
+  h1 span { color: var(--acc); }
+  p { margin: 8px 0; color: var(--tx2); }
+  code.path { display: block; margin: 14px 0; padding: 12px 14px; border-radius: 9px; background: var(--bg); color: var(--tx); font: 13px/1.5 ui-monospace, "SF Mono", Menlo, monospace; word-break: break-all; user-select: all; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+  button, a.btn { appearance: none; border: 1px solid var(--line); background: var(--card); color: var(--tx); border-radius: 9px; padding: 9px 14px; font: inherit; cursor: pointer; text-decoration: none; }
+  button.primary, a.btn.primary { background: var(--acc); border-color: var(--acc); color: #fff; font-weight: 600; }
+  ol { color: var(--tx2); padding-left: 20px; margin: 10px 0 0; }
+  .small { font-size: 12.5px; }
+  #bad { color: #c0392b; }
+</style>
+</head>
+<body>
+<main>
+  <div class="card">
+    <h1><span>&#129418;</span> Open in FoxView</h1>
+    <p id="status">Opening this folder&hellip;</p>
+    <code class="path" id="path" hidden></code>
+    <div class="row">
+      <a class="btn primary" id="again" href="#" hidden>Open in FoxView</a>
+      <a class="btn" id="finder" href="#" hidden>Reveal in Finder</a>
+      <button id="copy" hidden>Copy path</button>
+    </div>
+    <p id="bad" hidden></p>
+    <details id="help" hidden>
+      <summary class="small">No FoxView on this Mac, or nothing happened?</summary>
+      <ol class="small">
+        <li>Open Finder, press &#8984;&#8679;G (Go to Folder).</li>
+        <li>Paste the path above and press Return.</li>
+        <li>FoxView itself comes from the FoxView folder on Lucid (ask Sam for the installer).</li>
+      </ol>
+    </details>
+    <p class="small" id="foot">FoxLink decodes the folder path in your browser only. Nothing is sent anywhere.</p>
+  </div>
+</main>
+<script>
+// FoxLink (Sam 2026-10-15; readable form 2026-10-16). A link reads like the folder it opens: the path
+// after the Lucid master folder, one percent-encoded segment per folder, served by this file as the
+// site's 404 page. The first form, /open/?p=<base64> (LinkYourFile's value), still decodes. Decoded
+// here, client side; then the browser is handed foxview://open?p=…, and FoxView opens the folder or
+// reveals it in Finder by the editor's setting. The two buttons force either with in=.
+(function () {
+  var MASTER = '/Volumes/ads/PFM MEDIA MASTER FOLDER/';
+  function decodeParam(search) {
+    var m = /[?&]p=([^&#]*)/.exec(search || '');
+    if (!m) return null;
+    var raw = decodeURIComponent(m[1].replace(/\+/g, '%2B')).replace(/ /g, '+');
+    try {
+      var bytes = atob(raw);
+      return decodeURIComponent(Array.prototype.map.call(bytes, function (ch) { return '%' + ('00' + ch.charCodeAt(0).toString(16)).slice(-2); }).join(''));
+    } catch (e) { return null; }
+  }
+  function decodePath(pathname) {
+    var m = /^\/foxlink\/(.+)$/.exec(pathname || '');
+    if (!m) return null;
+    var rest = m[1].replace(/\/+$/, '');
+    if (!rest || rest === 'open' || rest === 'open/index.html' || rest === 'index.html' || rest === '404.html') return null;
+    try {
+      return MASTER + rest.split('/').map(function (seg) { return decodeURIComponent(seg); }).join('/');
+    } catch (e) { return null; }
+  }
+  function decode(pathname, search) { return decodePath(pathname) || decodeParam(search); }
+  function encodeParam(path) {
+    var utf8 = unescape(encodeURIComponent(path));
+    return btoa(utf8).replace(/=/g, '%3D');
+  }
+  window.FoxLink = { decode: decode, decodePath: decodePath, decodeParam: decodeParam, encodeParam: encodeParam };
+  if (typeof document === 'undefined' || !document || !document.body) return;   // the functions alone, for tests
+  var S = document.getElementById('status'), P = document.getElementById('path'), A = document.getElementById('again'),
+      F = document.getElementById('finder'), C = document.getElementById('copy'), B = document.getElementById('bad'), H = document.getElementById('help');
+  var path = decode(location.pathname, location.search);
+  if (!path || path.indexOf('/Volumes/ads/') !== 0) {
+    S.textContent = 'This link has no Lucid folder in it.';
+    B.textContent = path ? 'The path is not on Lucid: ' + path : 'Missing or unreadable link.';
+    B.hidden = false; return;
+  }
+  P.textContent = path; P.hidden = false;
+  var param = encodeParam(path);
+  var newLink = 'foxview://open?p=' + param;   // every build from 2026-10 answers this; FoxView applies the editor's setting
+  var oldLink = 'foxio://open?p=' + param;     // builds before FoxLink answer only this
+  A.href = newLink + '&in=foxview'; F.href = newLink + '&in=finder';
+  A.hidden = false; F.hidden = false; C.hidden = false; H.hidden = false;
+  C.onclick = function () {
+    navigator.clipboard && navigator.clipboard.writeText(path).then(function () { C.textContent = 'Copied'; setTimeout(function () { C.textContent = 'Copy path'; }, 1500); });
+  };
+  // Hand the browser the new scheme; if FoxView is an older build it will not answer, so the old
+  // scheme follows a moment later. The browser shows its own "Open FoxView?" sheet either way.
+  var left = false;
+  document.addEventListener('visibilitychange', function () { if (document.hidden) left = true; });
+  location.href = newLink;
+  setTimeout(function () { if (!left) { location.href = oldLink; } }, 1200);
+  setTimeout(function () { if (!left) { S.textContent = 'If FoxView did not open, it may not be installed on this Mac. The path is below.'; } }, 3000);
+})();
+</script>
+</body>
+</html>
